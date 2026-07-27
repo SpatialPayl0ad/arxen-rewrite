@@ -62,10 +62,12 @@ Recommended bot permissions:
 ```env
 DISCORD_TOKEN=your_bot_token
 CLIENT_ID=your_application_id
-GUILD_ID=your_test_server_id
+DEV_GUILD_ID=your_test_server_id
 DATA_DIR=/data
 REWRITE_LOG_CHANNEL=arxen-rewrite-logs
 ```
+
+`DEV_GUILD_ID` is optional and should only be set while testing. When it is present, commands are registered immediately in that development server. When it is blank or removed, Rewrite registers commands globally for public use.
 
 Mount a Railway volume at `/data` so dictionaries and server settings survive redeployments.
 
