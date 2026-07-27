@@ -1,12 +1,12 @@
 {
   "name": "arxen-rewrite",
-  "version": "1.0.0",
+  "version": "1.0.2-console",
   "description": "Discord word replacement and blocked-word bot with Excel dictionary import/export.",
   "main": "index.js",
   "type": "commonjs",
   "scripts": {
-    "start": "node index.js",
-    "check": "node --check index.js"
+    "start": "node -r ./arxen-console-heartbeat-autoload.js index.js",
+    "check": "node --check arxen-console-heartbeat-autoload.js && node --check index.js"
   },
   "engines": {
     "node": ">=18"
