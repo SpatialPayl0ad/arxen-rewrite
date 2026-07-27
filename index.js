@@ -16,7 +16,7 @@ const {
 
 const TOKEN = process.env.DISCORD_TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
-const GUILD_ID = process.env.GUILD_ID || '';
+const DEV_GUILD_ID = process.env.DEV_GUILD_ID || '';
 const DATA_DIR = process.env.DATA_DIR || '/data';
 const DATA_FILE = path.join(DATA_DIR, 'arxen-rewrite.json');
 const DEFAULT_LOG_CHANNEL = process.env.REWRITE_LOG_CHANNEL || 'arxen-rewrite-logs';
@@ -202,12 +202,12 @@ client.once('ready', async () => {
   client.user.setPresence({ activities: [{ name: 'Giving messages a second draft' }], status: 'online' });
 
   const rest = new REST({ version: '10' }).setToken(TOKEN);
-  if (GUILD_ID) {
-    await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: commands });
-    console.log(`Registered guild commands for ${GUILD_ID}`);
+  if (DEV_GUILD_ID) {
+    await rest.put(Routes.applicationGuildCommands(CLIENT_ID, DEV_GUILD_ID), { body: commands });
+    console.log(`Registered development guild commands for ${DEV_GUILD_ID}`);
   } else {
     await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
-    console.log('Registered global commands');
+    console.log('Registered global commands for public use');
   }
 });
 
@@ -231,7 +231,7 @@ client.on('interactionCreate', async interaction => {
     }
     if (sub === 'status') {
       return interaction.reply({
-        content: `**Arxen Rewrite v1.0.0**\nEnabled: ${cfg.enabled}\nChannels: ${cfg.channels.length}\nReplacement rules: ${cfg.replacements.length}\nBlocked terms: ${cfg.blockedWords.length}\nLog channel: #${cfg.logChannel}`,
+        content: `**Arxen Rewrite v1.0.1**\nEnabled: ${cfg.enabled}\nChannels: ${cfg.channels.length}\nReplacement rules: ${cfg.replacements.length}\nBlocked terms: ${cfg.blockedWords.length}\nLog channel: #${cfg.logChannel}`,
         ephemeral: true,
       });
     }
