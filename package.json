@@ -1,0 +1,19 @@
+{
+  "name": "arxen-rewrite",
+  "version": "1.0.0",
+  "description": "Discord word replacement and blocked-word bot with Excel dictionary import/export.",
+  "main": "index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node index.js",
+    "check": "node --check index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.5",
+    "xlsx": "^0.18.5"
+  }
+}
