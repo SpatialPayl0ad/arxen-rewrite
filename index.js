@@ -5,6 +5,7 @@ const path = require('path');
 const XLSX = require('xlsx');
 const {
   AttachmentBuilder,
+  ChannelType,
   Client,
   GatewayIntentBits,
   Partials,
@@ -26,8 +27,10 @@ if (!TOKEN || !CLIENT_ID) throw new Error('DISCORD_TOKEN and CLIENT_ID are requi
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
 const defaultGuild = () => ({
-  enabled: false,
+  enabled: true,
   channels: [],
+  disabledChannels: [],
+  autoEnableAllChannels: true,
   ignoredRoles: [],
   ignoredUsers: [],
   preserveCase: true,
@@ -50,12 +53,44 @@ function saveStore() {
   fs.renameSync(temp, DATA_FILE);
 }
 
+function migrateGuildConfig(cfg) {
+  let changed = false;
+  if (!Array.isArray(cfg.channels)) { cfg.channels = []; changed = true; }
+  if (!Array.isArray(cfg.disabledChannels)) { cfg.disabledChannels = []; changed = true; }
+  if (typeof cfg.autoEnableAllChannels !== 'boolean') { cfg.autoEnableAllChannels = true; changed = true; }
+  if (typeof cfg.enabled !== 'boolean') { cfg.enabled = true; changed = true; }
+  if (!Array.isArray(cfg.ignoredRoles)) { cfg.ignoredRoles = []; changed = true; }
+  if (!Array.isArray(cfg.ignoredUsers)) { cfg.ignoredUsers = []; changed = true; }
+  if (!Array.isArray(cfg.replacements)) { cfg.replacements = []; changed = true; }
+  if (!Array.isArray(cfg.blockedWords)) { cfg.blockedWords = []; changed = true; }
+  if (typeof cfg.preserveCase !== 'boolean') { cfg.preserveCase = true; changed = true; }
+  if (!cfg.logChannel) { cfg.logChannel = DEFAULT_LOG_CHANNEL; changed = true; }
+  return changed;
+}
+
 function configFor(guildId) {
   if (!store.guilds[guildId]) {
     store.guilds[guildId] = defaultGuild();
     saveStore();
+  } else if (migrateGuildConfig(store.guilds[guildId])) {
+    saveStore();
   }
   return store.guilds[guildId];
+}
+
+function isEligibleRewriteChannel(channel) {
+  return Boolean(channel && channel.type === ChannelType.GuildText && channel.isTextBased());
+}
+
+function syncAllGuildChannels(guild, cfg) {
+  if (!cfg.autoEnableAllChannels) return false;
+  const eligible = guild.channels.cache.filter(isEligibleRewriteChannel).map(channel => channel.id);
+  const next = eligible.filter(id => !cfg.disabledChannels.includes(id));
+  const current = [...cfg.channels].sort();
+  const desired = [...next].sort();
+  if (JSON.stringify(current) === JSON.stringify(desired)) return false;
+  cfg.channels = next;
+  return true;
 }
 
 function normalizeTerm(value) {
@@ -211,7 +246,7 @@ const rewriteCommand = new SlashCommandBuilder()
   .setName('rewrite')
   .setDescription('Manage Arxen Rewrite')
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-  .addSubcommand(sub => sub.setName('setup').setDescription('Enable Rewrite in the current channel'))
+  .addSubcommand(sub => sub.setName('setup').setDescription('Enable Rewrite in every eligible text channel'))
   .addSubcommand(sub => sub.setName('enable').setDescription('Enable rewriting'))
   .addSubcommand(sub => sub.setName('disable').setDescription('Disable rewriting'))
   .addSubcommand(sub => sub.setName('status').setDescription('Show configuration status'))
@@ -248,6 +283,15 @@ client.once('ready', async () => {
   console.log(`Arxen Rewrite v${VERSION} logged in as ${client.user.tag}`);
   client.user.setPresence({ activities: [{ name: 'Giving messages a second draft' }], status: 'online' });
 
+  let storeChanged = false;
+  for (const guild of client.guilds.cache.values()) {
+    const cfg = configFor(guild.id);
+    cfg.enabled = true;
+    cfg.autoEnableAllChannels = true;
+    if (syncAllGuildChannels(guild, cfg)) storeChanged = true;
+  }
+  if (storeChanged) saveStore();
+
   const rest = new REST({ version: '10' }).setToken(TOKEN);
   if (DEV_GUILD_ID) {
     await rest.put(Routes.applicationGuildCommands(CLIENT_ID, DEV_GUILD_ID), { body: commands });
@@ -258,6 +302,34 @@ client.once('ready', async () => {
   }
 });
 
+client.on('guildCreate', guild => {
+  const cfg = configFor(guild.id);
+  cfg.enabled = true;
+  cfg.autoEnableAllChannels = true;
+  syncAllGuildChannels(guild, cfg);
+  saveStore();
+});
+
+client.on('channelCreate', channel => {
+  if (!channel.guild || !isEligibleRewriteChannel(channel)) return;
+  const cfg = configFor(channel.guild.id);
+  if (!cfg.autoEnableAllChannels || cfg.disabledChannels.includes(channel.id)) return;
+  if (!cfg.channels.includes(channel.id)) {
+    cfg.channels.push(channel.id);
+    saveStore();
+  }
+});
+
+client.on('channelDelete', channel => {
+  if (!channel.guild) return;
+  const cfg = configFor(channel.guild.id);
+  const beforeChannels = cfg.channels.length;
+  const beforeDisabled = cfg.disabledChannels.length;
+  cfg.channels = cfg.channels.filter(id => id !== channel.id);
+  cfg.disabledChannels = cfg.disabledChannels.filter(id => id !== channel.id);
+  if (cfg.channels.length !== beforeChannels || cfg.disabledChannels.length !== beforeDisabled) saveStore();
+});
+
 client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand() || interaction.commandName !== 'rewrite' || !interaction.guild) return;
   const cfg = configFor(interaction.guildId);
@@ -266,14 +338,17 @@ client.on('interactionCreate', async interaction => {
   try {
     if (sub === 'setup') {
       cfg.enabled = true;
-      if (!cfg.channels.includes(interaction.channelId)) cfg.channels.push(interaction.channelId);
+      cfg.autoEnableAllChannels = true;
+      cfg.disabledChannels = [];
+      syncAllGuildChannels(interaction.guild, cfg);
       saveStore();
-      await logEvent(interaction.guild, cfg, `⚙️ ${interaction.user.tag} enabled Rewrite in <#${interaction.channelId}>.`);
-      return interaction.reply({ content: `Arxen Rewrite is enabled in <#${interaction.channelId}>.`, ephemeral: true });
+      await logEvent(interaction.guild, cfg, `⚙️ ${interaction.user.tag} enabled Rewrite in every eligible text channel.`);
+      return interaction.reply({ content: `Arxen Rewrite is enabled in **${cfg.channels.length}** eligible text channels.`, ephemeral: true });
     }
 
     if (sub === 'enable' || sub === 'disable') {
       cfg.enabled = sub === 'enable';
+      if (cfg.enabled && cfg.autoEnableAllChannels) syncAllGuildChannels(interaction.guild, cfg);
       saveStore();
       await logEvent(interaction.guild, cfg, `⚙️ ${interaction.user.tag} ${cfg.enabled ? 'enabled' : 'disabled'} Rewrite.`);
       return interaction.reply({ content: `Arxen Rewrite is now **${cfg.enabled ? 'enabled' : 'disabled'}**.`, ephemeral: true });
@@ -281,7 +356,7 @@ client.on('interactionCreate', async interaction => {
 
     if (sub === 'status') {
       return interaction.reply({
-        content: `**Arxen Rewrite v${VERSION}**\nEnabled: ${cfg.enabled}\nChannels: ${cfg.channels.length}\nReplacement rules: ${cfg.replacements.length}\nBlocked terms: ${cfg.blockedWords.length}\nLog channel: #${cfg.logChannel}\nStorage: ${DATA_FILE}`,
+        content: `**Arxen Rewrite v${VERSION}**\nEnabled: ${cfg.enabled}\nAuto-enable all channels: ${cfg.autoEnableAllChannels}\nActive channels: ${cfg.channels.length}\nDisabled channel exceptions: ${cfg.disabledChannels.length}\nReplacement rules: ${cfg.replacements.length}\nBlocked terms: ${cfg.blockedWords.length}\nLog channel: #${cfg.logChannel}\nStorage: ${DATA_FILE}`,
         ephemeral: true,
       });
     }
@@ -309,8 +384,11 @@ client.on('interactionCreate', async interaction => {
     if (sub === 'channel') {
       const target = interaction.options.getChannel('target', true);
       const enabled = interaction.options.getBoolean('enabled', true);
+      if (!isEligibleRewriteChannel(target)) return interaction.reply({ content: 'Rewrite can only watch standard server text channels.', ephemeral: true });
       cfg.channels = cfg.channels.filter(id => id !== target.id);
+      cfg.disabledChannels = cfg.disabledChannels.filter(id => id !== target.id);
       if (enabled) cfg.channels.push(target.id);
+      else cfg.disabledChannels.push(target.id);
       saveStore();
       await logEvent(interaction.guild, cfg, `⚙️ ${interaction.user.tag} ${enabled ? 'enabled' : 'disabled'} Rewrite in ${target}.`);
       return interaction.reply({ content: `Rewriting ${enabled ? 'enabled' : 'disabled'} in ${target}.`, ephemeral: true });
