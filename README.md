@@ -4,9 +4,19 @@ Giving every message a second draft.
 
 ## What it does
 
-Arxen Rewrite watches selected Discord channels, replaces configured words or phrases, deletes the original message, and reposts the rewritten text through a temporary webhook using the member's display name and avatar.
+Arxen Rewrite watches Discord text channels, replaces configured words or phrases, deletes the original message, and reposts the rewritten text through a temporary webhook using the member's display name and avatar.
 
 Each Discord server has its own local dictionary. Rules can be managed live through Discord commands or replaced in bulk from Excel.
+
+## Default channel behavior
+
+Rewrite is enabled automatically when it joins a server and watches every eligible server text channel by default.
+
+- New text channels are added automatically.
+- `/rewrite channel target:<channel> enabled:false` creates a persistent exception for that channel.
+- `/rewrite channel target:<channel> enabled:true` removes the exception and re-enables it.
+- `/rewrite setup` clears all channel exceptions and re-enables Rewrite across every eligible text channel.
+- `/rewrite disable` pauses rewriting globally without deleting the channel configuration.
 
 ## Live replacement commands
 
@@ -22,7 +32,7 @@ Changes are written immediately to the guild's section of `/data/arxen-rewrite.j
 
 ## Other commands
 
-- `/rewrite setup` — enables Rewrite in the current channel.
+- `/rewrite setup` — enable Rewrite in every eligible text channel and clear channel exceptions.
 - `/rewrite enable`
 - `/rewrite disable`
 - `/rewrite status`
