@@ -32,6 +32,7 @@ async function sendHeartbeat(client) {
       version: require('./package.json').version,
       status: 'online',
       activity: 'Giving messages a second draft',
+      activityByGuild: Object.fromEntries(guildIds.map((guildId) => [guildId, 'Giving messages a second draft'])),
       botUserId: client.user?.id || null,
       botTag: client.user?.tag || null,
       avatarUrl: client.user?.displayAvatarURL?.({ size: 128 }) || null,
