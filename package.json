@@ -9,7 +9,7 @@
     "check": "node --check arxen-console-heartbeat-autoload.js && node --check index.js"
   },
   "engines": {
-    "node": ">=18"
+    "node": "24.x"
   },
   "dependencies": {
     "discord.js": "^14.16.3",
